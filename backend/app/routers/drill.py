@@ -58,6 +58,15 @@ def run_action(entry_id: int, payload: EntryPayload) -> ActionResult:
     return ActionResult(ok=True, message=message, entry=entry)
 
 
+@router.post("/{entry_id}/consume", response_model=ActionResult)
+def consume_materialized(entry_id: int, payload: EntryPayload) -> ActionResult:
+    """消费分析物化分区数据集：记录分区水位与指标定义，父级结果与叶级贡献同源返回。"""
+    result, message = service.consume_materialized(entry_id, payload.values)
+    if result is None:
+        return ActionResult(ok=False, message=message)
+    return ActionResult(ok=True, message=message, entry=result)
+
+
 @router.get("/export")
 def export_entries() -> dict[str, Any]:
     """导出多维下钻分析清单：返回当前过滤条件下的全量数据。"""

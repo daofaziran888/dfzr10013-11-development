@@ -73,5 +73,32 @@ npm run dev
 - 列表接口统一返回 `{ items, total, page, size }`，动作接口统一返回 `{ ok, message }`。
 - 状态流转只允许在 `app/services` 里改，路由层不做业务判断。
 
+## 分析物化
+
+分析缓存管理在缓存策略之上提供物化能力：给缓存对象定义日期分区、分组维度与指标聚合含义
+（计数 / 求和 / 去重人数，分别维护），消费携带事实编号、修订号、删除标记的事实事件，
+维护可追溯的聚合物化分区数据集，供多维下钻分析跨模块读取分区统计与原始贡献明细。
+
+- 同一事实的更正在同一次提交里成套完成「旧分区撤回 + 新分区加入」，不会两边同时保留金额；
+  重复修订不重复应用，重复删除不重复扣减；
+- 原贡献不可得或修订断档时标记受影响分区，受污染分区不作为命中结果返回；
+- 重建在暂存区完整构建后原子替换，失败时保留上一份可追溯结果；
+- 多维下钻消费时记录分区水位与指标定义，叶级贡献和父级结果来自同一修订集合；
+- `GET /api/cache/materialize/{策略编号}/verify` 核对增量物化结果与同一事实集合的全量聚合一致。
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| POST | `/api/cache/materialize/define` | 定义/重定义物化口径（口径变更作废旧结果） |
+| GET | `/api/cache/materialize/objects` | 已定义物化对象及水位概况 |
+| POST | `/api/cache/materialize/{策略编号}/events` | 消费事实事件批次（增量/更正/删除） |
+| GET | `/api/cache/materialize/{策略编号}/dataset` | 物化分区数据集（分区统计） |
+| GET | `/api/cache/materialize/{策略编号}/partitions/{分区键}` | 单分区读取（命中判定） |
+| GET | `/api/cache/materialize/{策略编号}/partitions/{分区键}/contributions` | 原始贡献明细 |
+| POST | `/api/cache/materialize/{策略编号}/rebuild` | 重建（缺省重放事件日志，可传给定事实集合） |
+| GET | `/api/cache/materialize/{策略编号}/verify` | 与全量聚合核对 |
+| POST | `/api/drill/{id}/consume` | 下钻消费物化数据集，留读取凭证 |
+
+物化引擎测试：`cd backend && .venv/bin/python -m unittest discover -s tests -v`
+
 领域：数据工程
 子方向：数据分析与数据应用
